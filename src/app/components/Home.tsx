@@ -17,22 +17,7 @@ export function Home() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* User Panel Card */}
-          <Link
-            to="/user-access"
-            className="group bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-8 hover:scale-105 transition-all duration-300 shadow-2xl hover:shadow-purple-500/50 text-left w-full"
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="bg-white/20 backdrop-blur-sm rounded-full p-6 mb-6 group-hover:bg-white/30 transition-all">
-                <UtensilsCrossed className="w-16 h-16 text-white" />
-              </div>
-              <h2 className="text-3xl font-bold text-white mb-3">User Panel</h2>
-              <p className="text-purple-100">
-                Browse menu, place orders & track your order status live
-              </p>
-            </div>
-          </Link>
+        <div className="grid md:grid-cols-3 gap-6">
 
           {/* Captain Panel Card */}
           <Link

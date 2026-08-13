@@ -1,0 +1,11 @@
+﻿node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.gemini
+user-app/node_modules
+user-app/dist

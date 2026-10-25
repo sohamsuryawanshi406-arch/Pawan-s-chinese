@@ -1,17 +1,39 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link } from 'react-router';
-import { ArrowLeft, Clock, Flame, CheckCircle, AlertCircle, ChefHat } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { ArrowLeft, Clock, Flame, CheckCircle, AlertCircle, ChefHat, X, Lock } from 'lucide-react';
 import { useRestaurant, Order } from '../context/RestaurantContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// ─── Notification Sound Utility ────────────────────────────────────────────
+const playNotificationSound = () => {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.frequency.value = 800;
+  oscillator.type = 'sine';
+
+  gainNode.gain.setValueAtTime(0.8, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.8);
+};
+
 type ChefTab = 'pending' | 'cooking' | 'ready';
 
 export function ChefPanel() {
-  const { orders, updateOrderStatus } = useRestaurant();
+  const navigate = useNavigate();
+  const { orders, updateOrderStatus, cancelOrder, acceptOrder } = useRestaurant();
   const [activeTab, setActiveTab] = useState<ChefTab>('pending');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
 
-  const pendingOrders = orders.filter(o => o.status === 'accepted');
+  const pendingOrders = orders.filter(o => o.status === 'pending');
   const cookingOrders = orders.filter(o => o.status === 'cooking');
   const readyOrders   = orders.filter(o => o.status === 'ready');
 
@@ -45,10 +67,19 @@ export function ChefPanel() {
       const prevStatus = prevOrderStatuses.current[order.id];
 
       // New Order for Chef Trigger
-      if (prevStatus !== 'accepted' && order.status === 'accepted') {
-        speak(`New order from captain`);
-        toast.info(`🔔 Kitchen Alert: Table ${order.tableNumber}`, {
+      if (prevStatus !== 'pending' && order.status === 'pending') {
+        playNotificationSound();
+        const location = order.isParcel || order.tableNumber === 21 ? 'Parcel' : `table ${order.tableNumber}`;
+        toast.info(`🔔 Kitchen Alert: ${location === 'Parcel' ? 'Parcel' : 'Table ' + order.tableNumber}`, {
           style: { background: '#f59e0b', color: '#fff', border: 'none' }
+        });
+      }
+
+      // Order Ready Trigger
+      if (prevStatus !== 'ready' && order.status === 'ready') {
+        const location = order.isParcel || order.tableNumber === 21 ? 'Parcel' : `table ${order.tableNumber}`;
+        toast.success(`🔔 Order Ready: ${location === 'Parcel' ? 'Parcel' : 'Table ' + order.tableNumber}`, {
+          style: { background: '#10b981', color: '#fff', border: 'none' }
         });
       }
 
@@ -58,7 +89,7 @@ export function ChefPanel() {
 
   // ── Tab config ──────────────────────────────────────────────────────────────
   const tabs: { id: ChefTab; label: string; count: number; color: string }[] = [
-    { id: 'pending', label: 'New',     count: pendingOrders.length, color: 'text-rose-400' },
+    { id: 'pending', label: 'Pending', count: pendingOrders.length, color: 'text-rose-400' },
     { id: 'cooking', label: 'Cooking', count: cookingOrders.length, color: 'text-amber-400' },
     { id: 'ready',   label: 'Ready',   count: readyOrders.length,   color: 'text-emerald-400' },
   ];
@@ -68,9 +99,61 @@ export function ChefPanel() {
     activeTab === 'cooking' ? cookingOrders :
     readyOrders;
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === '@chef1') {
+      setIsAuthenticated(true);
+      toast.success('Login successful');
+    } else {
+      toast.error('Invalid password');
+      setPassword('');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div className="bg-slate-800 rounded-2xl p-8 shadow-2xl">
+            <div className="flex flex-col items-center text-center mb-8">
+              <div className="bg-orange-500/20 backdrop-blur-sm rounded-full p-6 mb-4">
+                <Lock className="w-12 h-12 text-orange-500" />
+              </div>
+              <h1 className="text-3xl font-bold text-white mb-2">Chef Panel</h1>
+              <p className="text-slate-400">Enter password to access</p>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-medium focus:border-orange-500 focus:outline-none transition-colors placeholder:text-slate-600"
+                  autoFocus
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white py-4 rounded-xl font-bold transition-all shadow-lg hover:shadow-orange-500/20"
+              >
+                Login
+              </button>
+            </form>
+            <div className="mt-6 text-center">
+              <Link to="/" className="text-slate-400 hover:text-white transition-colors text-sm">
+                ← Back to Home
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Order Card ──────────────────────────────────────────────────────────────
   const OrderCard = ({ order }: { order: Order }) => {
-    const isPending = order.status === 'accepted';
+    const isPending = order.status === 'pending';
     const isCooking = order.status === 'cooking';
     const isReady   = order.status === 'ready';
 
@@ -90,6 +173,13 @@ export function ChefPanel() {
       emerald: 'bg-emerald-500/10',
     };
     const accent = isPending ? 'rose' : isCooking ? 'amber' : 'emerald';
+    const isParcel = order.isParcel || order.tableNumber === 21;
+    
+    const headerBg = isParcel ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20' : bgAccentMap[accent];
+    const titleColor = isParcel ? 'text-amber-400' : 'text-white';
+    const statusBadge = isParcel ? 'text-amber-400 bg-amber-500/20 border-amber-500/30' : textAccentMap[accent];
+    const statusBadgeBg = isParcel ? '' : bgAccentMap[accent];
+    const cardBorder = isParcel ? 'border-amber-500/50 ring-1 ring-amber-500/30' : accentMap[accent];
 
     return (
       <motion.div
@@ -97,22 +187,22 @@ export function ChefPanel() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
-        className={`bg-white/5 border rounded-md overflow-hidden ${accentMap[accent]} ${isPending ? 'ring-1' : ''}`}
+        className={`bg-white/5 border rounded-md overflow-hidden ${cardBorder} ${isPending ? 'ring-1' : ''}`}
       >
         {/* Card Header */}
-        <div className={`px-4 py-3 flex items-center justify-between border-b border-white/10 ${bgAccentMap[accent]}`}>
+        <div className={`px-4 py-3 flex items-center justify-between border-b border-white/10 ${headerBg}`}>
           <div className="space-y-0.5">
-            <h2 className="text-2xl font-black tracking-tighter uppercase leading-none text-white">
-              Table {order.tableNumber}
+            <h2 className={`text-3xl font-black tracking-tighter uppercase leading-none ${titleColor}`}>
+              {isParcel ? 'Parcel' : `Table ${order.tableNumber}`}
             </h2>
             <div className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-slate-500" />
-              <span className="text-xs text-slate-500 font-bold tracking-widest uppercase">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <span className="text-sm text-slate-500 font-bold tracking-widest uppercase">
                 {new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
-          <div className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 border rounded-md ${textAccentMap[accent]} ${bgAccentMap[accent]}`}>
+          <div className={`text-sm font-black uppercase tracking-widest px-3 py-1.5 border rounded-md ${statusBadge} ${statusBadgeBg}`}>
             {isPending ? 'New' : isCooking ? 'Cooking' : 'Done'}
           </div>
         </div>
@@ -122,10 +212,17 @@ export function ChefPanel() {
           {order.items.map((item, idx) => (
             <div key={idx} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-1.5 h-1.5 flex-shrink-0 ${item.menuItem.category === 'veg' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <span className="text-sm font-bold text-slate-200 uppercase tracking-tight">{item.menuItem.name}</span>
+                <div className={`w-2 h-2 flex-shrink-0 ${item.menuItem.category === 'veg' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-slate-200 uppercase tracking-tight">{item.menuItem.name}</span>
+                </div>
               </div>
-              <span className={`text-sm font-black ${textAccentMap[accent]}`}>×{item.quantity}</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-black uppercase px-2 py-0.5 rounded ${item.portionSize === 'half' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                  {item.portionSize === 'half' ? 'Half' : 'Full'}
+                </span>
+                <span className={`text-base font-black ${textAccentMap[accent]}`}>×{item.quantity}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -133,16 +230,28 @@ export function ChefPanel() {
         {/* Actions */}
         <div className="px-4 pb-4 space-y-2">
           {isPending && (
-            <button
-              onClick={() => {
-                updateOrderStatus(order.id, 'cooking');
-                setActiveTab('cooking');   // ← Cooking tab वर जा
-              }}
-              className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-black py-3.5 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
-            >
-              <Flame className="w-4 h-4" />
-              Start Cooking
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  acceptOrder(order.id);
+                  setActiveTab('cooking');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white py-3.5 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"
+              >
+                <Flame className="w-4 h-4" />
+                Accept
+              </button>
+              <button
+                onClick={() => {
+                  cancelOrder(order.id);
+                  toast.success('Order cancelled');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-400 text-white py-3.5 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-rose-500/20"
+              >
+                <X className="w-4 h-4" />
+                Reject
+              </button>
+            </div>
           )}
 
           {isCooking && (
@@ -150,21 +259,12 @@ export function ChefPanel() {
               <button
                 onClick={() => {
                   updateOrderStatus(order.id, 'ready');
-                  setActiveTab('pending');  // ← Pending tab वर परत जा
+                  setActiveTab('ready');
                 }}
                 className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white py-3.5 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20"
               >
                 <CheckCircle className="w-4 h-4" />
                 Mark Ready
-              </button>
-              <button
-                onClick={() => {
-                  updateOrderStatus(order.id, 'accepted');
-                  setActiveTab('pending');  // ← Pending tab वर परत जा
-                }}
-                className="w-14 flex items-center justify-center border border-white/10 text-slate-400 hover:bg-white/10 transition-all text-lg"
-              >
-                ↩
               </button>
             </div>
           )}
